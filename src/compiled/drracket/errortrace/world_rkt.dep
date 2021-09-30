@@ -1,0 +1,1 @@
+("7.6" racket ("c3559c7d194806fc90b82034ef9e5407042d01ac" . "8932e6cb55cb538da185ef1b8b6f021c5eeac2ae") #"C:\\Users\\eloma\\OneDrive\\Bureau\\Studies\\ProjetS6\\actor\\src\\actor-contract.rkt" (collects #"errortrace" #"errortrace-key.rkt") (collects #"racket" #"main.rkt") (collects #"racket" #"runtime-config.rkt"))

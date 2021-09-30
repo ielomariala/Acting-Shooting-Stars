@@ -1,0 +1,124 @@
+This file is intended to developpers of the library. It is meant to specify structures used in the project and as a tool to fix objectives.
+
+# Structures 
+
+## Structure of an actor :
+(struct actor (pos mailbox do-message tag))
+- pos is the position of the actor, it is a pointed pair : (cons x y)
+- mailbox is the list of messages of the actor, the structure of a mail is discussed below
+- do-message the function called to apply a message of the actor. Basically, this function is used for behaviour specific to an actor.
+- tag is a string used to target an actor or a list of actors later on.
+
+## Structure of a message :
+(cons "tag1" (list FunctionPointer arg1 arg2)) -> can be a list ("tag1" FunctionPointer arg1 arg2 ...)
+- tag is a string. The world structure will send it back to all actors having that tag at the next tick
+- arg1 and arg2 are actually variable here. There can be as many argument as the function FunctionPointer needs. It can be none or even 1000.
+However FunctionPointer has a format that will be discussed below.
+
+## Structure of a FunctionPointer in message :
+Entries : As much as needed and of any kind -> 0..N
+Returns : (cons (list #actor ....) (list message....)) = (list (list #actor...) message...)
+-> message refers to the structure message mentionned above.
+This kind of function can do whatever it wants as long as it respects the format. It can create new actors or "kill" its own actor by not returning it.
+Any actor that is created this way will be updated meaning that all of its messages will be interpreted.
+Functions of this kind do not have to handle deleting the message that called them. It just returns the list of actors and messages after the actions it represents was done.
+
+### A FunctionPointer in message can now sent a messages to the actor for the next game tick:
+   Just use "self" tag in the message list sent by the function. The gameloop will send it back to the actor given in the first parameter of the message
+   and it to the list of existing actors.
+
+## Structure of world :
+'(actors1 actors2....) -> example: '((ship act1 act2) (wall act3))
+actorsN is a list of actors ordonned in many list according to their tags.
+
+## Structure of runtime function 
+Entry : world structure
+Return : world structure (updated)
+
+=================================================================================
+# State of the project
+
+## Disclaimer 
+Functions such as do-message is obsolete, it has been replaced by actor-execute-first-message. Also, the function actor-update doesn't match the new structure.
+It can still be used though.
+
+## Work to be done/is being done
+
+actor-update-list should replace actor-update
+ -> Cleaning and testing
+
+New structure above World will manage a list of World -> give ability to go back in time by saving states
+ -> Works around a circular array that has a length that can be customize by the user
+ -> Feature : Being able to set up routine so the user can set up function that will be called at every loop of the runtime
+
+ Runtime
+ -> Add function in inverse order that the order we want them to be executed
+
+Graphics of actors
+ -> Luxx and Raart
+ -> Might another attribute in actor structure for its sprite
+
+Collisions of actors and individual messages
+ -> Once a collision is detected (This is should be done in different loop than other actions interpretation) :
+    -> The actors that collided received each a message indicating that they collided.
+    -> Collided function in message should provide with who they collide. First argument can either be the actor or its tag
+ -> To be thought : Managing non colliding actors such as timers or visual interface (health bar ...) 
+
+Cleaning : attribute do-message in actor might no longer needed -> actor-execute-first-message should be called everytime
+-> hm duplicated actor-remove-first-message in actor.rkt and type.rkt
+
+Self messages that are received at the tick n+1.
+-> Allows function to work on their own and give individual actor specific behaviour
+-> Need to proxy on the runtime loop -> tag "self" and destroys the current actor. First parameter of such a message would be the new actor with this message.
+(might be a bit sloppy)
+
+Deletion of old actors. (might be done automatically during world update, can also be done by putting a special wall at the far left of the screen that
+will destroy any actor it collides with)
+
+Function collide should be able to customize :
+   - Any enemy with a tag should be able to choose its behaviour when it is hit
+   (Might use association map with tag and corresponding function)
+
+## Experiments :
+### For level design :
+How to stock it ? How to activates actions at a certain time ?
+
+#### Structure details
+Create an actor seed that has a special message containing all information needed by the scenario.
+The actor "seed" is just an empty actor used for the special message to be called
+format of the message :
+   tag: "Seed" <--- might not be necessary but convenient for checking mutliples seeding ?
+   tick-count
+   list of argN of a special format.
+
+Structure of argN in actor seed message arguments :
+   - trigger t : could be tick timing ? (ie after 70 tick : activate event)
+   - Events e : function that triggers at the trigger t timing that creates a list of new actors and/or update seed actor
+
+Using self messaging, the seed can sustains itself during the game.
+
+#### Example :
+   The seed message has the follow 3 argN in its content :
+      - 80th tick : creates 3 spaceships at respectives coordinates(20, 20), (45, 68) and (84, 15)
+      - 150th tick : creates 1 big spaceship at coordinate(45, 85)
+      - 300th tick : Kills every actor that have the tag "enemy" (by sending a message "kill" to all actors with "enemy" tag)
+       and creates a boss with its own mechanics using self messages.
+
+   The function collide of the Boss send a new message to the actor seed that contains the continuation of the world so the "level 2" can take place.
+   It resets its tick-count and has new argN like "30th tick : spawn 1 enemy..."
+
+#### How would such a function works ?
+
+FunctionE(act, tick-count, argN)
+   (if (car (argN).t = tick-count)
+      (
+      #   let (car argN).e act) --> Return format to be determined... 
+      #  (cons                  --> append with FunctionE returns ?
+      #  '() ;; destroys itself
+      #  (list (cons "self" (act FunctionE (+ tick-count 1) (cdr argN)))) ;; will be recreated by the function loop with updated message
+      )
+      (cons
+         '() ;; destroys itself
+         (list (cons "self" (act FunctionE (+ tick-count 1) argN))) ;; will be recreated by the function loop with updated message
+      )
+   )
